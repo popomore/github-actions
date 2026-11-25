@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawn } from 'node:child_process';
+import { createServer } from 'node:http';
 import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
@@ -32,10 +33,9 @@ test('semantic-release accumulates scoped changes, skips docs and preserves the 
   assert.equal(git('rev-parse', 'HEAD'), minor.source_sha);
   assert.match(minor.notes, /https:\/\/github.com\/fixture\/app/);
 });
-test('breaking headers and footers select major versions', async t => {
+for (const [name, message] of [['header', 'fix(app)!: replace the API'], ['footer', 'feat(app): change defaults\n\nBREAKING CHANGE: clients must pass a mode']]) test(`a breaking ${name} independently selects a major version`, async t => {
   const { commit, plan } = fixture(t);
-  commit('fix(app)!: replace the API'); assert.equal((await plan()).version, '2.0.0');
-  commit('feat(app): change defaults\n\nBREAKING CHANGE: clients must pass a mode'); assert.equal((await plan()).version, '2.0.0');
+  commit(message); assert.equal((await plan()).version, '2.0.0');
 });
 test('preview tags increment and a stable promotion consumes the same history', async t => {
   const { git, commit, plan } = fixture(t);
@@ -110,4 +110,47 @@ test('merge commits include only changes against the release branch first parent
   git('switch', '-c', 'app-feature'); commit('chore(app): add export implementation');
   git('switch', 'main'); git('merge', '--no-ff', 'app-feature', '-m', 'feat(app): add export');
   assert.equal((await plan()).version, '1.1.0');
+});
+
+test('disabled units on another branch do not block automatic releases or branch-tip checks', async t => {
+  const { cwd, git, commit } = fixture(t);
+  writeFileSync(resolve(cwd, '.release/other.json'), JSON.stringify({ schema: 1, unit: 'other', versioning: 'semantic-release', branch: 'release', tag_prefix: 'other-v', auto_on_main: false, paths: ['other/**'] }));
+  const sha = commit('fix(app): preserve state');
+  git('update-ref', 'refs/remotes/origin/main', sha);
+  git('update-ref', 'refs/remotes/origin/release', git('rev-parse', 'app-v1.0.0^{commit}'));
+  const requests = []; let ref, object;
+  const server = createServer(async (request, response) => {
+    const chunks = []; for await (const chunk of request) chunks.push(chunk);
+    const body = chunks.length ? JSON.parse(Buffer.concat(chunks)) : undefined;
+    requests.push(request.method + ' ' + request.url);
+    const send = (data, status = 200) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(data)); };
+    const base = '/repos/fixture/app/git';
+    if (request.url === base + '/ref/heads/main') return send({ object: { type: 'commit', sha } });
+    if (request.url === base + '/ref/tags/app-v1.0.1-preview.1') return ref ? send(ref) : send({}, 404);
+    if (request.method === 'POST' && request.url === base + '/tags') {
+      object = { message: body.message, object: { type: body.type, sha: body.object } }; return send({ sha: 'd'.repeat(40) });
+    }
+    if (request.method === 'POST' && request.url === base + '/refs') {
+      ref = { object: { type: 'tag', sha: 'd'.repeat(40) } }; return send(ref);
+    }
+    if (request.url === base + '/tags/' + 'd'.repeat(40)) return send(object);
+    send({}, 500);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const receipt = resolve(cwd, '.git/receipt.json');
+  const child = spawn(process.execPath, [new URL('../src/action.mjs', import.meta.url).pathname], { cwd, env: { ...process.env,
+    GITHUB_SHA: sha, GITHUB_REPOSITORY: 'fixture/app', GITHUB_EVENT_NAME: 'push', GITHUB_REF_TYPE: 'branch', GITHUB_REF_NAME: 'main',
+    GITHUB_API_URL: `http://127.0.0.1:${server.address().port}`, GITHUB_OUTPUT: resolve(cwd, '.git/output'),
+    RELEASE_DRY_RUN: 'false', RELEASE_MANIFEST: '', RELEASE_MANIFEST_DIRECTORY: '.release', RELEASE_RECEIPT_FILE: receipt,
+    RELEASE_TAG_TOKEN: 'fixture-token', GH_TOKEN: '', GITHUB_TOKEN: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  t.after(() => child.kill()); let stderr = ''; child.stderr.on('data', chunk => { stderr += chunk; }); child.stdout.resume();
+  const code = await new Promise((resolve, reject) => { child.on('error', reject); child.on('close', resolve); });
+  assert.equal(code, 0, stderr);
+  const result = JSON.parse(readFileSync(receipt));
+  assert.equal(result.status, 'created'); assert.equal(result.results.find(p => p.unit === 'other').status, 'disabled');
+  assert.equal(result.results.find(p => p.unit === 'app').tag, 'app-v1.0.1-preview.1');
+  assert.equal(requests.filter(p => p.includes('/ref/heads/')).length, 1);
+  assert.ok(requests.every(p => !p.includes('/heads/release')));
+  assert.equal(git('tag'), 'app-v1.0.0'); assert.equal(git('status', '--porcelain'), '');
 });
