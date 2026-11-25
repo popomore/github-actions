@@ -27,6 +27,8 @@ The action defaults to `dry-run: 'true'`. Planning uses a disposable local mirro
 
 Writes require a dedicated `RELEASE_TAG_TOKEN` because the separate tag-push product workflow must run. The action never falls back to `GITHUB_TOKEN`. Caller workflows serialize all units that share pointers. Annotated tags persist the exact source SHA, manifest digest, channel, version and release notes; conflicts fail without moving tags. The product workflow validates this identity and builds/publishes the tested source through its existing adapter. Python previews project to `X.Y.Z.devN`; other artifacts retain SemVer.
 
+An existing Apple updater may explicitly declare `preview_tag_compatibility: "timestamp"`. Its adapter uses `previewCompatibilityPlan` to project the semantic version into the already-supported timestamp tag/asset format. The annotated tag retains `semantic_tag` and `semantic_version`; subsequent planning reconstructs these references only in its disposable mirror. The installed-client discovery URL stays compatible, and semantic-release still owns the version sequence. This exception never changes stable tags or other products.
+
 Source version files remain development metadata. Product packaging injects the resolved release version only into the build checkout. Public APIs are `@popomore/release-actions/planner` and `@popomore/release-actions/apple`; install this repository by immutable Git/tarball SHA, using the consumer's committed lockfile. This repository does not publish an npm package.
 
 ## Apple applications

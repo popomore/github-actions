@@ -65,3 +65,18 @@ test('the shipped action plans without credentials or consumer mutations', t => 
   assert.match(readFileSync(output, 'utf8'), /tags=\["app-v1.0.1"\]/);
   assert.equal(JSON.parse(readFileSync(receipt)).status, 'verified'); assert.equal(git('status', '--porcelain'), '');
 });
+test('a timestamp preview adapter retains installed-client discovery while core owns versions', async t => {
+  const { cwd, git, commit, plan } = fixture(t);
+  const file = resolve(cwd, '.release/app.json'), unit = JSON.parse(readFileSync(file));
+  unit.preview_tag_compatibility = 'timestamp'; writeFileSync(file, JSON.stringify(unit) + '\n');
+  commit('feat(app): add export');
+  const { previewCompatibilityPlan } = await import('../src/tags.mjs');
+  const first = await plan(true), timestamp = git('log', '-1', '--format=%ct');
+  const compatible = previewCompatibilityPlan(first, timestamp);
+  assert.match(compatible.tag, /^app-v1\.1\.0\.[1-9][0-9]*-[a-f0-9]{7}$/);
+  git('tag', '-a', compatible.tag, '-m', JSON.stringify(compatible));
+  commit('fix(app): preserve selection');
+  assert.equal((await plan(true)).version, '1.1.0-preview.2');
+  assert.equal((await plan(false)).version, '1.1.0');
+  assert.equal(git('tag', '--list', '*-preview.*'), '');
+});

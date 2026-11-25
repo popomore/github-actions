@@ -33,6 +33,7 @@ export function validateUnit(unit) {
       || !/^(?:[a-z0-9]+(?:-[a-z0-9]+)*-)?v$/.test(unit.tag_prefix ?? '')
       || !/^[\w./-]+$/.test(unit.branch ?? '') || unit.branch.startsWith('-') || unit.branch.includes('..')
       || typeof unit.auto_on_main !== 'boolean') throw new Error('Invalid semantic-release unit');
+  if (unit.preview_tag_compatibility !== undefined && unit.preview_tag_compatibility !== 'timestamp') throw new Error('Unsupported preview compatibility format');
   if (unit.prerelease !== undefined && unit.prerelease !== 'preview') throw new Error('Only the preview prerelease channel is supported');
   if (unit.paths !== undefined && (!Array.isArray(unit.paths) || !unit.paths.length)) throw new Error('Release paths must be a nonempty list');
   if (unit.ignore !== undefined && !Array.isArray(unit.ignore)) throw new Error('Release ignore must be a list');
@@ -65,20 +66,36 @@ export async function planUnit({ cwd = process.cwd(), manifestPath, sourceSha = 
     git(root, 'clone', '--mirror', '--shared', resolve(cwd), mirror);
     git(mirror, 'update-ref', `refs/heads/${unit.branch}`, sourceSha);
     git(mirror, 'symbolic-ref', 'HEAD', `refs/heads/${unit.branch}`);
-    // GitHub's annotated source plan is the durable channel record. Rehydrate
-    // core's channel notes only inside this disposable mirror.
-    for (const tag of git(mirror, 'tag', '--list', unit.tag_prefix + '*-preview.*').split('\n').filter(Boolean)) {
+    // Annotated plans are the durable channel record. Rehydrate core's channel
+    // notes and explicitly declared legacy preview projections only in this mirror.
+    for (const tag of git(mirror, 'tag', '--list', unit.tag_prefix + '*').split('\n').filter(Boolean)) {
+      const canonical = tag.includes('-preview.');
       let saved;
       try { saved = JSON.parse(git(mirror, 'for-each-ref', '--format=%(contents)', `refs/tags/${tag}`)); }
-      catch { throw new Error('Preview tag lacks a semantic-release plan'); }
-      if (saved.kind !== 'semantic-release' || saved.unit !== unit.unit || saved.tag !== tag || saved.repository !== repository
-          || saved.channel !== 'prerelease' || saved.source_sha !== git(mirror, 'rev-parse', `refs/tags/${tag}^{commit}`)
-          || saved.manifest_sha !== digest(execFileSync('git', ['show', `${saved.source_sha}:${manifestPath}`], { cwd: mirror })))
+      catch { if (canonical) throw new Error('Preview tag lacks a semantic-release plan'); else continue; }
+      const compatibility = saved.kind === 'semantic-release-compatibility';
+      if (!canonical && !compatibility) continue;
+      const source = git(mirror, 'rev-parse', `refs/tags/${tag}^{commit}`);
+      if (saved.unit !== unit.unit || saved.tag !== tag || saved.repository !== repository || saved.source_sha !== source
+          || saved.manifest_sha !== digest(execFileSync('git', ['show', `${source}:${manifestPath}`], { cwd: mirror })))
         throw new Error('Preview tag has conflicting release provenance');
+      let semanticTag = tag;
+      if (compatibility) {
+        if (unit.preview_tag_compatibility !== 'timestamp') throw new Error('Legacy preview projection is not declared');
+        const version = /^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)-preview\.([1-9][0-9]*)$/.exec(saved.semantic_version ?? '');
+        const timestamp = git(mirror, 'log', '-1', '--format=%ct', source);
+        const base = version && version.slice(1, 4).join('.');
+        if (!version || saved.channel !== 'timestamp' || saved.semantic_tag !== unit.tag_prefix + saved.semantic_version
+            || tag !== `${unit.tag_prefix}${base}.${timestamp}-${source.slice(0, 7)}`
+            || saved.version !== `${base}-${timestamp}.g${source.slice(0, 7)}`) throw new Error('Legacy preview projection differs from its semantic plan');
+        semanticTag = saved.semantic_tag;
+        const existing = git(mirror, 'tag', '--list', semanticTag);
+        if (existing && git(mirror, 'rev-parse', `${semanticTag}^{commit}`) !== source) throw new Error('Conflicting semantic preview tags');
+        if (!existing) git(mirror, 'tag', semanticTag, source);
+      } else if (saved.kind !== 'semantic-release' || saved.channel !== 'prerelease') throw new Error('Preview channel differs from its plan');
       git(mirror, '-c', 'user.name=Release planner', '-c', 'user.email=planner@example.invalid',
-        'notes', '--ref', `semantic-release-${tag}`, 'add', '-f', '-m', JSON.stringify({ channels: ['preview'] }), saved.source_sha);
+        'notes', '--ref', `semantic-release-${semanticTag}`, 'add', '-f', '-m', JSON.stringify({ channels: ['preview'] }), source);
     }
-
     // A local stable reference gives core its required stable line while existing
     // products keep their approved real branches and promotion controls.
     const stable = '__semantic_release_stable__';
