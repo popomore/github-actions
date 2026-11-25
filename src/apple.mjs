@@ -1,6 +1,6 @@
 import { createRequire } from 'node:module';
 import { execFileSync } from 'node:child_process';
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 const require = createRequire(import.meta.url);
@@ -34,7 +34,7 @@ export function verifyArtifactReceipt({ plan, directory, planFile, assetNames, s
   }
   return receipt;
 }
-export function recoverChannelNote({ plan, env, channel }) {
+export function recoverChannelNote({ plan, env, channel, cwd = process.cwd() }) {
   if (!/^v\d+\.\d+\.\d+(?:-preview\.[1-9]\d*)?$/.test(plan.tag) || !/^[a-f0-9]{40}$/.test(plan.sourceSha)) throw new Error('Invalid recovery identity');
   const token = env.GITHUB_TOKEN || env.GH_TOKEN;
   if (!token) throw new Error('Release recovery requires the workflow token');
@@ -43,18 +43,36 @@ export function recoverChannelNote({ plan, env, channel }) {
     GIT_COMMITTER_NAME: 'semantic-release-bot', GIT_COMMITTER_EMAIL: 'semantic-release-bot@martynus.net',
     GIT_CONFIG_COUNT: '1', GIT_CONFIG_KEY_0: 'http.https://github.com/.extraheader',
     GIT_CONFIG_VALUE_0: `AUTHORIZATION: basic ${Buffer.from(`x-access-token:${token}`).toString('base64')}` };
-  const git = args => {
-    try { return execFileSync('git', args, { env: authEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
-    catch { throw new Error('Release note recovery failed; credentials and remote output were suppressed'); }
+  const git = (args, allowMissing = false) => {
+    try { return execFileSync('git', args, { cwd, env: authEnv, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim(); }
+    catch (error) {
+      if (allowMissing && error.status === 1) return null;
+      throw new Error('Release note recovery failed; credentials and remote output were suppressed');
+    }
   };
   const remote = git(['ls-remote', '--tags', 'origin', `refs/tags/${plan.tag}`, `refs/tags/${plan.tag}^{}`]);
   const lines = remote ? remote.split('\n') : [];
   if ((lines.find(line => line.endsWith('^{}')) || lines[0])?.split(/\s/)[0] !== plan.sourceSha) throw new Error('Recovery tag differs from the packaged source');
+  const remoteObject = lines.find(line => line.endsWith(`\trefs/tags/${plan.tag}`))?.split(/\s/)[0];
+  const localObject = git(['tag', '--list', plan.tag, '--format=%(objectname)']);
+  if (localObject && localObject !== remoteObject) throw new Error('Recovery local tag conflicts with the verified remote tag');
+  if (git(['rev-parse', '--verify', `${plan.sourceSha}^{commit}`]) !== plan.sourceSha) throw new Error('Recovery source is not available locally');
+  const readNote = noteRef => {
+    const text = git(['notes', '--ref', noteRef, 'show', plan.sourceSha], true);
+    if (text === null) return null;
+    const note = JSON.parse(text);
+    if (!Array.isArray(note.channels) || !note.channels.includes(channel)) throw new Error('Existing tag channel note conflicts with the plan');
+    return note;
+  };
+  const localNote = readNote(ref);
   if (git(['ls-remote', 'origin', ref])) {
-    git(['fetch', 'origin', `${ref}:${ref}`]);
-    const note = JSON.parse(git(['notes', '--ref', ref, 'show', plan.tag]));
-    if (!note.channels?.includes(channel)) throw new Error('Existing tag channel note conflicts with the plan');
+    const inspectionRef = `refs/notes/release-recovery-${randomUUID()}`;
+    try {
+      git(['fetch', '--no-tags', 'origin', `${ref}:${inspectionRef}`]);
+      if (!readNote(inspectionRef)) throw new Error('Existing tag channel note conflicts with the plan');
+    } finally { git(['update-ref', '-d', inspectionRef]); }
   } else {
-    git(['notes', '--ref', ref, 'add', '-m', JSON.stringify({ channels: [channel] }), plan.tag]); git(['push', 'origin', ref]);
+    if (!localNote) git(['notes', '--ref', ref, 'add', '-m', JSON.stringify({ channels: [channel] }), plan.sourceSha]);
+    git(['push', 'origin', ref]);
   }
 }

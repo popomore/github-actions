@@ -44,9 +44,14 @@ export function scopedCommits(cwd, commits, unit) {
   const include = (unit.paths ?? ['**']).map(pattern), exclude = (unit.ignore ?? []).map(pattern);
   return commits.filter(commit => {
     if (!/^[a-f0-9]{40}$/.test(commit.hash)) throw new Error('Invalid commit identity');
-    const paths = git(cwd, 'diff-tree', '--root', '-m', '--no-commit-id', '--name-only', '-r', '--no-renames', '-z', commit.hash).split('\0').filter(Boolean);
+    const paths = git(cwd, 'diff-tree', '--root', '--diff-merges=first-parent', '--no-commit-id', '--name-only', '-r', '--no-renames', '-z', commit.hash).split('\0').filter(Boolean);
     return paths.some(path => include.some(re => re.test(path)) && !exclude.some(re => re.test(path)));
   });
+}
+
+function validateManifestPath(path) {
+  if (typeof path !== 'string' || !path || path.startsWith('/') || path.split('/').includes('..') || /[\r\n:]/.test(path)) throw new Error('Invalid manifest path');
+  return path;
 }
 
 // Core runs against a disposable local mirror. Its permission probe and fetches
@@ -55,7 +60,7 @@ export async function planUnit({ cwd = process.cwd(), manifestPath, sourceSha = 
   if (!/^[a-f0-9]{40}$/.test(sourceSha) || git(cwd, 'rev-parse', 'HEAD') !== sourceSha) throw new Error('Checkout differs from source SHA');
   if (git(cwd, 'rev-parse', '--is-shallow-repository') !== 'false') throw new Error('Full Git history is required');
   if (!/^[\w.-]+\/[\w.-]+$/.test(repository ?? '')) throw new Error('Invalid source repository');
-  if (!manifestPath || manifestPath.startsWith('/') || manifestPath.split('/').includes('..') || /[\r\n:]/.test(manifestPath)) throw new Error('Invalid manifest path');
+  validateManifestPath(manifestPath);
   const bytes = execFileSync('git', ['show', `${sourceSha}:${manifestPath}`], { cwd });
   const unit = validateUnit(JSON.parse(bytes));
   if (preview && unit.prerelease !== 'preview') throw new Error('Unit does not declare a preview channel');
@@ -77,7 +82,7 @@ export async function planUnit({ cwd = process.cwd(), manifestPath, sourceSha = 
       if (!canonical && !compatibility) continue;
       const source = git(mirror, 'rev-parse', `refs/tags/${tag}^{commit}`);
       if (saved.unit !== unit.unit || saved.tag !== tag || saved.repository !== repository || saved.source_sha !== source
-          || saved.manifest_sha !== digest(execFileSync('git', ['show', `${source}:${manifestPath}`], { cwd: mirror })))
+          || saved.manifest_sha !== digest(execFileSync('git', ['show', `${source}:${validateManifestPath(saved.manifest_path)}`], { cwd: mirror })))
         throw new Error('Preview tag has conflicting release provenance');
       let semanticTag = tag;
       if (compatibility) {

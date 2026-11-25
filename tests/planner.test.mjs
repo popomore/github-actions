@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync, renameSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { planUnit, validateUnit, digest } from '../src/planner.mjs';
@@ -85,4 +85,29 @@ test('unit planning does not load or execute a product semantic-release configur
   writeFileSync(resolve(cwd, 'release.config.mjs'), "throw new Error('Product configuration must not execute in unit planning');\n");
   commit('fix(app): preserve state');
   assert.equal((await plan()).version, '1.0.1');
+});
+
+test('preview history survives a manifest move and rejects invalid historical paths', async t => {
+  const { cwd, git, commit, plan } = fixture(t);
+  commit('feat(app): add export');
+  const first = await plan(true);
+  git('tag', '-a', first.tag, '-m', JSON.stringify({ ...first, kind: 'semantic-release' }));
+  renameSync(resolve(cwd, '.release/app.json'), resolve(cwd, '.release/moved.json'));
+  commit('fix(app): repair export');
+  const moved = preview => planUnit({ cwd, manifestPath: '.release/moved.json', repository: 'fixture/app', preview });
+  assert.equal((await moved(true)).version, '1.1.0-preview.2');
+  assert.equal((await moved(false)).version, '1.1.0');
+  git('tag', '-d', first.tag);
+  git('tag', '-a', first.tag, first.source_sha, '-m', JSON.stringify({ ...first, kind: 'semantic-release', manifest_path: '../outside.json' }));
+  await assert.rejects(moved(true), /manifest path/);
+});
+test('merge commits include only changes against the release branch first parent', async t => {
+  const { git, commit, plan } = fixture(t);
+  git('switch', '-c', 'other-feature'); commit('feat(other): add another product', 'other/file');
+  git('switch', 'main'); commit('fix(app): repair state'); git('tag', 'app-v1.0.1');
+  git('merge', '--no-ff', 'other-feature', '-m', 'feat(other): integrate unrelated product');
+  assert.equal((await plan()).status, 'unchanged');
+  git('switch', '-c', 'app-feature'); commit('chore(app): add export implementation');
+  git('switch', 'main'); git('merge', '--no-ff', 'app-feature', '-m', 'feat(app): add export');
+  assert.equal((await plan()).version, '1.1.0');
 });
