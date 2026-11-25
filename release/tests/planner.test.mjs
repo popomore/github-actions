@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawn } from 'node:child_process';
 import { createServer } from 'node:http';
-import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync, renameSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, rmSync, readFileSync, renameSync, symlinkSync, existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { planUnit, validateUnit, digest } from '../src/planner.mjs';
@@ -209,4 +209,12 @@ test('a stable action retry reports the original tag and validates the remote wi
   assert.ok(requests.some(request => request.includes('/git/tags/')));
   conflict = true; const bad = await run(); assert.notEqual(bad.code, 0); assert.match(bad.stderr, /different source/);
   assert.ok(requests.every(request => request.startsWith('GET '))); assert.equal(git('status', '--porcelain'), '');
+});
+
+test('planning rejects dangling package symlinks before writing outside its disposable checkout', async t => {
+  const { cwd, commit, plan } = fixture(t);
+  const target = resolve(cwd, '.git/escaped-package.json');
+  symlinkSync(target, resolve(cwd, 'package.json')); commit('fix(app): preserve state');
+  await assert.rejects(plan(), /Package configuration must stay inside/);
+  assert.equal(existsSync(target), false);
 });
