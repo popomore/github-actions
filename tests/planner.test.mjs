@@ -80,3 +80,9 @@ test('a timestamp preview adapter retains installed-client discovery while core 
   assert.equal((await plan(false)).version, '1.1.0');
   assert.equal(git('tag', '--list', '*-preview.*'), '');
 });
+test('unit planning does not load or execute a product semantic-release configuration', async t => {
+  const { cwd, commit, plan } = fixture(t);
+  writeFileSync(resolve(cwd, 'release.config.mjs'), "throw new Error('Product configuration must not execute in unit planning');\n");
+  commit('fix(app): preserve state');
+  assert.equal((await plan()).version, '1.0.1');
+});

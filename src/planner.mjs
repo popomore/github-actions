@@ -2,7 +2,7 @@ import semanticRelease from 'semantic-release';
 import { analyzeCommits } from '@semantic-release/commit-analyzer';
 import { generateNotes } from '@semantic-release/release-notes-generator';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, readFileSync, writeFileSync, existsSync, lstatSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
@@ -101,6 +101,14 @@ export async function planUnit({ cwd = process.cwd(), manifestPath, sourceSha = 
     const stable = '__semantic_release_stable__';
     if (preview) git(mirror, 'update-ref', `refs/heads/${stable}`, sourceSha);
     git(root, 'clone', '--shared', '--branch', unit.branch, mirror, work);
+    // Core discovers configuration even when API options override it. Give the
+    // disposable worktree an explicit empty package config so it never executes
+    // the product's release.config.* or needs its application dependencies.
+    const packageFile = resolve(work, 'package.json');
+    if (existsSync(packageFile) && lstatSync(packageFile).isSymbolicLink()) throw new Error('Package configuration must stay inside the planning checkout');
+    const metadata = existsSync(packageFile) ? JSON.parse(readFileSync(packageFile, 'utf8')) : { private: true };
+    writeFileSync(packageFile, JSON.stringify({ ...metadata, release: {} }) + '\n');
+
     const plugin = {
       async analyzeCommits(_config, context) {
         return analyzeCommits({ preset: 'conventionalcommits' }, { ...context, commits: scopedCommits(work, context.commits, unit) });
