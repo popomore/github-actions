@@ -1,4 +1,4 @@
-name: Semantic release tags
+name: Release
 description: Plan scoped Conventional Commit releases and create immutable source-bound tags.
 inputs:
   manifest-directory:
@@ -76,4 +76,4 @@ runs:
         RELEASE_TAG_TOKEN: ${{ inputs.tag-token }}
         RELEASE_RECEIPT_FILE: ${{ inputs.receipt-file }}
         RELEASE_IMPLEMENTATION_REF: ${{ github.action_ref }}
-      run: node "$RELEASE_ACTION_ROOT/src/action.mjs"
+      run: node "$RELEASE_ACTION_ROOT/release/src/action.mjs"

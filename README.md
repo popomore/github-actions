@@ -1,10 +1,10 @@
-# Release Actions
+# GitHub Actions
 
-Public semantic-release tooling for popomore applications. Consumers pin a full commit SHA. No private Meta checkout, registry credentials, signing identity, application assets or product source is required to use this repository.
+Shared GitHub Actions for popomore projects. This version adds the `release/` action and shared release helpers. Consumers pin a full commit SHA. No private Meta checkout, registry credentials, signing identity, application assets or product source is required to use this repository.
 
-## Version planning and tags
+## Release: version planning and tags
 
-`semantic-release/action.yml` runs semantic-release 26.0.1 against full Git history. Each `.release/units/*.json` declares its branch, non-overlapping tag prefix, paths, ignored paths and existing automatic-release switch:
+`popomore/github-actions/release@<full commit SHA>` runs semantic-release 26.0.1 against full Git history. Each `.release/units/*.json` declares its branch, non-overlapping tag prefix, paths, ignored paths and existing automatic-release switch:
 
 ```json
 {
@@ -29,7 +29,7 @@ Writes require a dedicated `RELEASE_TAG_TOKEN` because the separate tag-push pro
 
 An existing Apple updater may explicitly declare `preview_tag_compatibility: "timestamp"`. Its adapter uses `previewCompatibilityPlan` to project the semantic version into the already-supported timestamp tag/asset format. The annotated tag retains `semantic_tag` and `semantic_version`; subsequent planning reconstructs these references only in its disposable mirror. The installed-client discovery URL stays compatible, and semantic-release still owns the version sequence. This exception never changes stable tags or other products.
 
-Source version files remain development metadata. Product packaging injects the resolved release version only into the build checkout. Public APIs are `@popomore/release-actions/planner` and `@popomore/release-actions/apple`; install this repository by immutable Git/tarball SHA, using the consumer's committed lockfile. This repository does not publish an npm package.
+Source version files remain development metadata. Product packaging injects the resolved release version only into the build checkout. Public APIs are `@popomore/github-actions/release/planner`, `@popomore/github-actions/release/tags` and `@popomore/github-actions/release/apple`; install this repository by immutable Git/tarball SHA, using the consumer's committed lockfile. This repository does not publish an npm package.
 
 ## Apple applications
 

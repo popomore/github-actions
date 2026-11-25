@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "unit": "github-actions",
+  "type": "assets",
+  "versioning": "semantic-release",
+  "branch": "main",
+  "tag_prefix": "v",
+  "auto_on_main": false,
+  "base_version": "0.0.0",
+  "paths": [
+    "**"
+  ],
+  "ignore": [
+    "**/*.md"
+  ]
+}

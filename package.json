@@ -1,5 +1,5 @@
 {
-  "name": "@popomore/release-actions",
+  "name": "@popomore/github-actions",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,13 +9,13 @@
   },
   "packageManager": "pnpm@10.34.9",
   "exports": {
-    "./apple": "./src/apple.mjs",
-    "./planner": "./src/planner.mjs",
-    "./tags": "./src/tags.mjs"
+    "./release/apple": "./release/src/apple.mjs",
+    "./release/planner": "./release/src/planner.mjs",
+    "./release/tags": "./release/src/tags.mjs"
   },
   "scripts": {
-    "test": "node --test tests/*.test.mjs",
-    "check": "node --check src/apple.mjs && node --check src/planner.mjs && node --check src/action.mjs"
+    "test": "node --test release/tests/*.test.mjs",
+    "check": "node --check release/src/apple.mjs && node --check release/src/planner.mjs && node --check release/src/action.mjs"
   },
   "dependencies": {
     "semantic-release": "26.0.1",
