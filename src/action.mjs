@@ -25,6 +25,7 @@ try {
     if (dryRun === 'false' && process.env.GITHUB_REF_NAME !== unit.branch) throw new Error('Tag writes require the declared release branch');
     git(cwd, 'merge-base', '--is-ancestor', sourceSha, `refs/remotes/origin/${unit.branch}`);
     if (automatic && !unit.auto_on_main) { results.push({ unit: unit.unit, status: 'disabled', tag: '', created: false }); continue; }
+    if (automatic && unit.preview_tag_compatibility) throw new Error('Compatibility previews require the explicit product adapter');
     results.push(await planUnit({ cwd, manifestPath: path, sourceSha, repository: process.env.GITHUB_REPOSITORY, preview: automatic && unit.prerelease === 'preview' }));
   }
   if (!results.length) throw new Error('At least one unit must remain selected');

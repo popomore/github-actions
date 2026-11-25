@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "unit": "release-actions",
+  "type": "assets",
+  "versioning": "semantic-release",
+  "branch": "main",
+  "tag_prefix": "v",
+  "auto_on_main": false,
+  "base_version": "0.0.0",
+  "paths": ["src/**", "semantic-release/**", "tests/**", "package.json", "pnpm-lock.yaml", ".github/workflows/release.yml"],
+  "ignore": ["**/*.md"]
+}
