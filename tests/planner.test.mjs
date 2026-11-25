@@ -54,3 +54,14 @@ test('unit policy, wrong checkout and shallow history fail closed', async t => {
   await assert.rejects(planUnit({ cwd, manifestPath: '.release/app.json', repository: 'fixture/app', sourceSha: 'a'.repeat(40) }), /Checkout/);
   writeFileSync(resolve(cwd, '.git/shallow'), git('rev-parse', 'HEAD') + '\n'); await assert.rejects(plan(), /Full Git history/);
 });
+test('the shipped action plans without credentials or consumer mutations', t => {
+  const { cwd, git, commit } = fixture(t); const sha = commit('fix(app): preserve state');
+  git('update-ref', 'refs/remotes/origin/main', sha);
+  const output = resolve(cwd, '.git/action-output'), receipt = resolve(cwd, '.git/receipt.json');
+  execFileSync(process.execPath, [new URL('../src/action.mjs', import.meta.url).pathname], { cwd,
+    env: { ...process.env, GITHUB_SHA: sha, GITHUB_REPOSITORY: 'fixture/app', GITHUB_EVENT_NAME: 'pull_request', GITHUB_OUTPUT: output,
+      RELEASE_DRY_RUN: 'true', RELEASE_MANIFEST_DIRECTORY: '.release', RELEASE_RECEIPT_FILE: receipt,
+      RELEASE_TAG_TOKEN: '', GH_TOKEN: '', GITHUB_TOKEN: '' }, stdio: 'pipe' });
+  assert.match(readFileSync(output, 'utf8'), /tags=\["app-v1.0.1"\]/);
+  assert.equal(JSON.parse(readFileSync(receipt)).status, 'verified'); assert.equal(git('status', '--porcelain'), '');
+});

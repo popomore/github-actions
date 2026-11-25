@@ -4,10 +4,19 @@
   "private": true,
   "type": "module",
   "license": "MIT",
-  "engines": { "node": ">=26.13.0" },
+  "engines": {
+    "node": ">=26.13.0"
+  },
   "packageManager": "pnpm@10.34.9",
-  "exports": { "./apple": "./src/apple.mjs", "./planner": "./src/planner.mjs" },
-  "scripts": { "test": "node --test tests/*.test.mjs", "check": "node --check src/apple.mjs && node --check src/planner.mjs && node --check src/action.mjs" },
+  "exports": {
+    "./apple": "./src/apple.mjs",
+    "./planner": "./src/planner.mjs",
+    "./tags": "./src/tags.mjs"
+  },
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node --check src/apple.mjs && node --check src/planner.mjs && node --check src/action.mjs"
+  },
   "dependencies": {
     "semantic-release": "26.0.1",
     "@semantic-release/commit-analyzer": "13.0.1",
