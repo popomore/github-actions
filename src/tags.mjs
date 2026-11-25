@@ -45,3 +45,13 @@ export async function createTag(plan, { token, apiUrl = 'https://api.github.com'
   if (!await inspect()) throw new Error('Created tag could not be verified');
   return { ...plan, status: created ? 'created' : 'exists', created };
 }
+
+export async function verifyBranchTip({ repository, branch, sourceSha }, { token, apiUrl = 'https://api.github.com', fetchImpl = fetch }) {
+  if (!token) throw new Error('Branch verification requires the explicit workflow/tag token');
+  const response = await fetchImpl(`${apiUrl}/repos/${repository}/git/ref/heads/${encodeURIComponent(branch)}`, {
+    headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28' },
+  });
+  if (!response.ok) throw new Error(`Branch verification failed (${response.status})`);
+  const result = await response.json();
+  if (result.object?.type !== 'commit' || result.object.sha !== sourceSha) throw new Error('Branch advanced after planning; use the newer source');
+}

@@ -22,3 +22,12 @@ test('annotated tags preserve the full plan and retries never overwrite a ref', 
   api.corrupt(); await assert.rejects(createTag(plan, options), /different source/); assert.equal(api.writes, 2);
   await assert.rejects(createTag(plan, { fetchImpl: api.fetchImpl }), /dedicated/);
 });
+test('branch provenance uses authenticated API reads when checkout credentials are not persisted', async () => {
+  const { verifyBranchTip } = await import('../src/tags.mjs');
+  const fetchImpl = async (url, options) => {
+    assert.equal(options.headers.Authorization, 'Bearer fixture-token'); assert.match(url, /\/git\/ref\/heads\/main$/);
+    return new Response(JSON.stringify({ object: { type: 'commit', sha: 'a'.repeat(40) } }));
+  };
+  await verifyBranchTip({ repository: 'fixture/app', branch: 'main', sourceSha: 'a'.repeat(40) }, { token: 'fixture-token', fetchImpl });
+  await assert.rejects(verifyBranchTip({ repository: 'fixture/app', branch: 'main', sourceSha: 'b'.repeat(40) }, { token: 'fixture-token', fetchImpl }), /Branch advanced/);
+});

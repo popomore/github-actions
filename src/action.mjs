@@ -1,7 +1,7 @@
 import { appendFileSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { planUnit, validateUnit, git } from './planner.mjs';
-import { createTag } from './tags.mjs';
+import { createTag, verifyBranchTip } from './tags.mjs';
 const input = (name, fallback = '') => process.env[`RELEASE_${name.toUpperCase().replaceAll('-', '_')}`] || fallback;
 try {
   const cwd = process.cwd(), sourceSha = process.env.GITHUB_SHA;
@@ -35,7 +35,7 @@ try {
     const token = input('tag-token');
     if (!token) throw new Error('A dedicated RELEASE_TAG_TOKEN is required');
     const branches = new Set(units.filter(item => !excluded.includes(item.unit.unit)).map(item => item.unit.branch));
-    for (const branch of branches) if (git(cwd, 'ls-remote', 'origin', `refs/heads/${branch}`).split(/\s/)[0] !== sourceSha) throw new Error('Branch advanced after planning; use the newer source');
+    for (const branch of branches) await verifyBranchTip({ repository: process.env.GITHUB_REPOSITORY, branch, sourceSha }, { token, apiUrl: process.env.GITHUB_API_URL });
     for (let i = 0; i < results.length; i++) if (results[i].tag) results[i] = await createTag(results[i], { token, apiUrl: process.env.GITHUB_API_URL });
   }
   const active = results.filter(plan => plan.tag), file = resolve(input('receipt-file', resolve(process.env.RUNNER_TEMP || cwd, 'release-semantic.json')));
