@@ -75,6 +75,11 @@ test('a timestamp preview adapter retains installed-client discovery while core 
   const compatible = previewCompatibilityPlan(first, timestamp);
   assert.match(compatible.tag, /^app-v1\.1\.0\.[1-9][0-9]*-[a-f0-9]{7}$/);
   git('tag', '-a', compatible.tag, '-m', JSON.stringify(compatible));
+  const retry = await plan(true);
+  assert.equal(retry.status, 'exists');
+  assert.equal(retry.tag, first.tag); assert.equal(retry.version, first.version);
+  const recovered = previewCompatibilityPlan(retry, timestamp);
+  for (const key of ['tag', 'version', 'semantic_tag', 'semantic_version', 'notes', 'channel']) assert.equal(recovered[key], compatible[key]);
   commit('fix(app): preserve selection');
   assert.equal((await plan(true)).version, '1.1.0-preview.2');
   assert.equal((await plan(false)).version, '1.1.0');

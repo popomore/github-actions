@@ -8,6 +8,7 @@ import { resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 import { createHash } from 'node:crypto';
 import { Writable } from 'node:stream';
+import { previewCompatibilityPlan } from './tags.mjs';
 
 export const digest = bytes => createHash('sha256').update(bytes).digest('hex');
 export function git(cwd, ...args) {
@@ -58,15 +59,25 @@ function recordedRelease(cwd, base, unit, preview) {
   const candidates = [];
   const tags = git(cwd, 'tag', '--points-at', base.source_sha, '--list', unit.tag_prefix + '*').split('\n').filter(Boolean);
   for (const tag of tags) {
-    const version = tag.slice(unit.tag_prefix.length);
-    const parsed = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-preview\.[1-9]\d*)?$/.exec(version);
-    if (!parsed || Boolean(parsed[4]) !== preview || git(cwd, 'cat-file', '-t', `refs/tags/${tag}`) !== 'tag') continue;
+    if (git(cwd, 'cat-file', '-t', `refs/tags/${tag}`) !== 'tag') continue;
     let saved;
     try { saved = JSON.parse(git(cwd, 'for-each-ref', '--format=%(contents)', `refs/tags/${tag}`)); }
     catch { continue; } // Legacy tags without a stored plan remain history.
+    let semanticTag = tag;
+    if (saved?.kind === 'semantic-release-compatibility') {
+      if (!preview || unit.preview_tag_compatibility !== 'timestamp') continue;
+      const { semantic_tag, semantic_version, ...projection } = saved;
+      saved = { ...projection, kind: 'semantic-release', tag: semantic_tag, version: semantic_version, channel: 'prerelease' };
+      const projected = previewCompatibilityPlan(saved, git(cwd, 'log', '-1', '--format=%ct', base.source_sha));
+      if (projected.tag !== tag || projected.version !== projection.version || projection.channel !== 'timestamp') throw new Error('Legacy preview projection differs from its semantic plan');
+      semanticTag = semantic_tag;
+    }
+    const version = semanticTag.slice(unit.tag_prefix.length);
+    const parsed = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-preview\.[1-9]\d*)?$/.exec(version);
+    if (!semanticTag.startsWith(unit.tag_prefix) || !parsed || Boolean(parsed[4]) !== preview) continue;
     if (saved?.kind !== 'semantic-release') continue;
     if (saved.schema !== 1 || saved.versioning !== 'semantic-release' || saved.unit !== base.unit
-        || saved.repository !== base.repository || saved.source_sha !== base.source_sha || saved.tag !== tag || saved.version !== version
+        || saved.repository !== base.repository || saved.source_sha !== base.source_sha || saved.tag !== semanticTag || saved.version !== version
         || saved.channel !== (preview ? 'prerelease' : 'stable') || saved.manifest_path !== base.manifest_path
         || saved.manifest_sha !== base.manifest_sha || typeof saved.notes !== 'string') throw new Error('Existing release tag has conflicting release provenance');
     candidates.push(saved);
