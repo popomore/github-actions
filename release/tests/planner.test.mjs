@@ -168,7 +168,12 @@ for (const preview of [false, true]) test(`an existing ${preview ? 'preview' : '
   await assert.rejects(plan(preview), /provenance/);
 });
 test('a legacy baseline with no releasable changes remains unchanged', async t => {
-  assert.equal((await fixture(t).plan()).status, 'unchanged');
+  const { git, plan } = fixture(t);
+  assert.equal((await plan()).status, 'unchanged');
+  for (const message of ['Legacy release notes', 'null', '{}']) {
+    git('tag', '-d', 'app-v1.0.0'); git('tag', '-a', 'app-v1.0.0', '-m', message);
+    assert.equal((await plan()).status, 'unchanged');
+  }
 });
 test('a stable action retry reports the original tag and validates the remote without new writes', async t => {
   const { cwd, git, commit, plan } = fixture(t); const sha = commit('fix(app): preserve state');

@@ -64,7 +64,7 @@ function recordedRelease(cwd, base, unit, preview) {
     let saved;
     try { saved = JSON.parse(git(cwd, 'for-each-ref', '--format=%(contents)', `refs/tags/${tag}`)); }
     catch { continue; } // Legacy tags without a stored plan remain history.
-    if (saved.kind !== 'semantic-release') continue;
+    if (saved?.kind !== 'semantic-release') continue;
     if (saved.schema !== 1 || saved.versioning !== 'semantic-release' || saved.unit !== base.unit
         || saved.repository !== base.repository || saved.source_sha !== base.source_sha || saved.tag !== tag || saved.version !== version
         || saved.channel !== (preview ? 'prerelease' : 'stable') || saved.manifest_path !== base.manifest_path
@@ -99,7 +99,7 @@ export async function planUnit({ cwd = process.cwd(), manifestPath, sourceSha = 
       let saved;
       try { saved = JSON.parse(git(mirror, 'for-each-ref', '--format=%(contents)', `refs/tags/${tag}`)); }
       catch { if (canonical) throw new Error('Preview tag lacks a semantic-release plan'); else continue; }
-      const compatibility = saved.kind === 'semantic-release-compatibility';
+      const compatibility = saved?.kind === 'semantic-release-compatibility';
       if (!canonical && !compatibility) continue;
       const source = git(mirror, 'rev-parse', `refs/tags/${tag}^{commit}`);
       if (saved.unit !== unit.unit || saved.tag !== tag || saved.repository !== repository || saved.source_sha !== source
