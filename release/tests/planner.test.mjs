@@ -154,3 +154,54 @@ test('disabled units on another branch do not block automatic releases or branch
   assert.ok(requests.every(p => !p.includes('/heads/release')));
   assert.equal(git('tag'), 'app-v1.0.0'); assert.equal(git('status', '--porcelain'), '');
 });
+
+for (const preview of [false, true]) test(`an existing ${preview ? 'preview' : 'stable'} plan at the source survives an interrupted receipt write`, async t => {
+  const { git, commit, plan } = fixture(t);
+  commit('feat(app): add export');
+  const first = await plan(preview);
+  git('tag', '-a', first.tag, '-m', JSON.stringify({ ...first, kind: 'semantic-release' }));
+  const retry = await plan(preview);
+  assert.equal(retry.status, 'exists'); assert.equal(retry.tag, first.tag); assert.equal(retry.version, first.version);
+  assert.equal(retry.notes, first.notes); assert.equal(retry.source_sha, first.source_sha); assert.equal(retry.created, false);
+  git('tag', '-d', first.tag);
+  git('tag', '-a', first.tag, first.source_sha, '-m', JSON.stringify({ ...first, kind: 'semantic-release', manifest_sha: 'f'.repeat(64) }));
+  await assert.rejects(plan(preview), /provenance/);
+});
+test('a legacy baseline with no releasable changes remains unchanged', async t => {
+  assert.equal((await fixture(t).plan()).status, 'unchanged');
+});
+test('a stable action retry reports the original tag and validates the remote without new writes', async t => {
+  const { cwd, git, commit, plan } = fixture(t); const sha = commit('fix(app): preserve state');
+  const first = await plan(); const saved = { ...first, kind: 'semantic-release' };
+  git('tag', '-a', first.tag, '-m', JSON.stringify(saved)); git('update-ref', 'refs/remotes/origin/main', sha);
+  const requests = []; let conflict = false;
+  const server = createServer((request, response) => {
+    requests.push(request.method + ' ' + request.url);
+    const send = (data, status = 200) => { response.writeHead(status, { 'Content-Type': 'application/json' }); response.end(JSON.stringify(data)); };
+    const base = '/repos/fixture/app/git';
+    if (request.method !== 'GET') return send({}, 500);
+    if (request.url === base + '/ref/heads/main') return send({ object: { type: 'commit', sha } });
+    if (request.url === base + '/ref/tags/' + first.tag) return send({ object: { type: 'tag', sha: 'd'.repeat(40) } });
+    if (request.url === base + '/tags/' + 'd'.repeat(40)) return send({ message: JSON.stringify(saved), object: { type: 'commit', sha: conflict ? 'f'.repeat(40) : sha } });
+    send({}, 500);
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  t.after(() => { server.closeAllConnections(); server.close(); });
+  const receipt = resolve(cwd, '.git/retry-receipt'), output = resolve(cwd, '.git/retry-output');
+  const run = async () => {
+    const child = spawn(process.execPath, [new URL('../src/action.mjs', import.meta.url).pathname], { cwd, env: { ...process.env,
+      GITHUB_SHA: sha, GITHUB_REPOSITORY: 'fixture/app', GITHUB_EVENT_NAME: 'workflow_dispatch', GITHUB_REF_TYPE: 'branch', GITHUB_REF_NAME: 'main',
+      GITHUB_API_URL: `http://127.0.0.1:${server.address().port}`, GITHUB_OUTPUT: output,
+      RELEASE_DRY_RUN: 'false', RELEASE_MANIFEST: '.release/app.json', RELEASE_MANIFEST_DIRECTORY: '', RELEASE_RECEIPT_FILE: receipt,
+      RELEASE_TAG_TOKEN: 'fixture-token', GH_TOKEN: '', GITHUB_TOKEN: '' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    t.after(() => child.kill()); let stderr = ''; child.stderr.on('data', chunk => { stderr += chunk; }); child.stdout.resume();
+    const code = await new Promise((resolve, reject) => { child.on('error', reject); child.on('close', resolve); }); return { code, stderr };
+  };
+  const good = await run(); assert.equal(good.code, 0, good.stderr);
+  assert.equal(JSON.parse(readFileSync(receipt)).status, 'exists');
+  const outputs = readFileSync(output, 'utf8').split('\n');
+  assert.ok(outputs.includes('tag=' + first.tag)); assert.ok(outputs.includes('version=1.0.1'));
+  assert.ok(requests.some(request => request.includes('/git/tags/')));
+  conflict = true; const bad = await run(); assert.notEqual(bad.code, 0); assert.match(bad.stderr, /different source/);
+  assert.ok(requests.every(request => request.startsWith('GET '))); assert.equal(git('status', '--porcelain'), '');
+});

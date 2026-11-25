@@ -54,6 +54,27 @@ function validateManifestPath(path) {
   return path;
 }
 
+function recordedRelease(cwd, base, unit, preview) {
+  const candidates = [];
+  const tags = git(cwd, 'tag', '--points-at', base.source_sha, '--list', unit.tag_prefix + '*').split('\n').filter(Boolean);
+  for (const tag of tags) {
+    const version = tag.slice(unit.tag_prefix.length);
+    const parsed = /^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(-preview\.[1-9]\d*)?$/.exec(version);
+    if (!parsed || Boolean(parsed[4]) !== preview || git(cwd, 'cat-file', '-t', `refs/tags/${tag}`) !== 'tag') continue;
+    let saved;
+    try { saved = JSON.parse(git(cwd, 'for-each-ref', '--format=%(contents)', `refs/tags/${tag}`)); }
+    catch { continue; } // Legacy tags without a stored plan remain history.
+    if (saved.kind !== 'semantic-release') continue;
+    if (saved.schema !== 1 || saved.versioning !== 'semantic-release' || saved.unit !== base.unit
+        || saved.repository !== base.repository || saved.source_sha !== base.source_sha || saved.tag !== tag || saved.version !== version
+        || saved.channel !== (preview ? 'prerelease' : 'stable') || saved.manifest_path !== base.manifest_path
+        || saved.manifest_sha !== base.manifest_sha || typeof saved.notes !== 'string') throw new Error('Existing release tag has conflicting release provenance');
+    candidates.push(saved);
+  }
+  if (candidates.length > 1) throw new Error('Multiple release plans at the source; cannot recover a unique identity');
+  return candidates[0];
+}
+
 // Core runs against a disposable local mirror. Its permission probe and fetches
 // cannot write to GitHub or the consumer checkout, including credential-free PRs.
 export async function planUnit({ cwd = process.cwd(), manifestPath, sourceSha = git(cwd, 'rev-parse', 'HEAD'), repository, preview = false }) {
@@ -130,7 +151,10 @@ export async function planUnit({ cwd = process.cwd(), manifestPath, sourceSha = 
       tagFormat: unit.tag_prefix + '${version}', plugins: [plugin] }, { cwd: work, env, stdout: quiet, stderr: quiet });
     const base = { schema: 1, unit: unit.unit, source_sha: sourceSha, repository, manifest_path: manifestPath,
       manifest_sha: digest(bytes), versioning: 'semantic-release' };
-    if (!result?.nextRelease) return { ...base, status: 'unchanged', tag: '', created: false };
+    if (!result?.nextRelease) {
+      const saved = recordedRelease(mirror, base, unit, preview);
+      return saved ? { ...saved, ...base, status: 'exists', created: false } : { ...base, status: 'unchanged', tag: '', created: false };
+    }
     const next = result.nextRelease;
     return { ...base, status: 'verified', tag: next.gitTag, version: next.version,
       channel: preview ? 'prerelease' : 'stable', notes: next.notes, previous_tag: result.lastRelease.gitTag ?? '', created: false };
