@@ -23,7 +23,8 @@ try {
   const results = [];
   for (const { path, unit } of units.filter(item => !excluded.includes(item.unit.unit))) {
     if (dryRun === 'false' && process.env.GITHUB_REF_NAME !== unit.branch) throw new Error('Tag writes require the declared release branch');
-    git(cwd, 'merge-base', '--is-ancestor', sourceSha, `refs/remotes/origin/${unit.branch}`);
+    if (dryRun === 'false') git(cwd, 'merge-base', '--is-ancestor', sourceSha, `refs/remotes/origin/${unit.branch}`);
+    else if (process.env.GITHUB_EVENT_NAME === 'pull_request') git(cwd, 'merge-base', '--is-ancestor', `refs/remotes/origin/${unit.branch}`, sourceSha);
     if (automatic && !unit.auto_on_main) { results.push({ unit: unit.unit, status: 'disabled', tag: '', created: false }); continue; }
     if (automatic && unit.preview_tag_compatibility) throw new Error('Compatibility previews require the explicit product adapter');
     results.push(await planUnit({ cwd, manifestPath: path, sourceSha, repository: process.env.GITHUB_REPOSITORY, preview: automatic && unit.prerelease === 'preview' }));

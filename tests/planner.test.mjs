@@ -56,7 +56,7 @@ test('unit policy, wrong checkout and shallow history fail closed', async t => {
 });
 test('the shipped action plans without credentials or consumer mutations', t => {
   const { cwd, git, commit } = fixture(t); const sha = commit('fix(app): preserve state');
-  git('update-ref', 'refs/remotes/origin/main', sha);
+  git('update-ref', 'refs/remotes/origin/main', git('rev-parse', 'app-v1.0.0^{commit}'));
   const output = resolve(cwd, '.git/action-output'), receipt = resolve(cwd, '.git/receipt.json');
   execFileSync(process.execPath, [new URL('../src/action.mjs', import.meta.url).pathname], { cwd,
     env: { ...process.env, GITHUB_SHA: sha, GITHUB_REPOSITORY: 'fixture/app', GITHUB_EVENT_NAME: 'pull_request', GITHUB_OUTPUT: output,
