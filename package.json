@@ -1,0 +1,26 @@
+{
+  "name": "@popomore/github-actions",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=26.13.0"
+  },
+  "packageManager": "pnpm@10.34.9",
+  "exports": {
+    "./release/apple": "./release/src/apple.mjs",
+    "./release/planner": "./release/src/planner.mjs",
+    "./release/tags": "./release/src/tags.mjs"
+  },
+  "scripts": {
+    "test": "node --test release/tests/*.test.mjs",
+    "check": "node --check release/src/apple.mjs && node --check release/src/planner.mjs && node --check release/src/action.mjs"
+  },
+  "dependencies": {
+    "semantic-release": "26.0.1",
+    "@semantic-release/commit-analyzer": "13.0.1",
+    "@semantic-release/release-notes-generator": "14.1.1",
+    "conventional-changelog-conventionalcommits": "9.3.1"
+  }
+}

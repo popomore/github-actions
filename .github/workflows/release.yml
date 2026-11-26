@@ -1,0 +1,30 @@
+name: Release tags
+on:
+  push:
+    branches: [main]
+    paths: ['**', '!**/*.md']
+  workflow_dispatch:
+    inputs:
+      dry-run:
+        description: Plan without creating a release tag.
+        type: boolean
+        default: true
+permissions:
+  contents: read
+concurrency:
+  group: release-tags-main
+  cancel-in-progress: false
+jobs:
+  tags:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./release
+        with:
+          manifest: .release/units/github-actions.json
+          dry-run: ${{ github.event_name == 'workflow_dispatch' && inputs.dry-run }}
+          tag-token: ${{ secrets.RELEASE_TAG_TOKEN }}
