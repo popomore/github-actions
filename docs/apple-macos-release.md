@@ -2,7 +2,10 @@
 
 `apple-macos-release` manages source verification, immutable plans, retained
 signed packages and publication gates. A product adapter supplies the actual
-macOS build, signing, notarization and distribution commands.
+macOS build, signing, notarization and distribution commands. The shared
+semantic engine supplies version decisions; this independent Action supplies
+the macOS release stages. See [release flow](release-flow.md) for composition
+and [version policy](versioning.md) for channel/version rules.
 
 ## Workflow
 
