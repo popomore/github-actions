@@ -1,5 +1,5 @@
-name: Apple release
-description: Plan, retain signed packages, and publish one source-bound Apple release through a product adapter.
+name: Apple macOS release
+description: Plan, retain signed packages, and publish one source-bound macOS release through a product adapter.
 inputs:
   registry-url:
     description: npm registry for tool bootstrap and engine dependencies; defaults to the GitHub-hosted runner registry.
@@ -22,10 +22,10 @@ inputs:
     description: The source-sha output of the original plan phase.
   plan-artifact:
     description: Unique plan artifact name in this workflow.
-    default: apple-release-plan
+    default: apple-macos-release-plan
   signed-artifact:
     description: Unique signed package artifact name in this workflow.
-    default: apple-signed-packages
+    default: apple-macos-signed-packages
   artifact-directory:
     description: Dedicated directory containing validated-artifacts.json and its named files.
     default: dist
@@ -84,6 +84,7 @@ runs:
         {
           printf 'APPLE_RELEASE_TOOLS=%s\n' "$APPLE_ROOT"
           printf 'APPLE_PROFILE=%s\nAPPLE_PREVIEW_SIGNING=%s\n' "$APPLE_PROFILE" "$APPLE_PREVIEW_SIGNING"
+          printf 'APPLE_STABLE_SIGNING=developer-id\n'
           printf 'APPLE_ARTIFACT_DIRECTORY=%s\nRELEASE_ARTIFACTS=%s\n' "$APPLE_DIRECTORY" "$APPLE_DIRECTORY"
           printf 'RELEASE_PLAN=target/release-plan/plan.json\nCI_RUN_ID=%s\n' "$APPLE_CI_RUN"
         } >> "$GITHUB_ENV"
@@ -103,7 +104,7 @@ runs:
         GH_TOKEN: ${{ inputs.token }}
         APPLE_SOURCE_MODE: ${{ inputs.source-mode }}
         APPLE_CI_WORKFLOW: ${{ inputs.ci-workflow }}
-      run: node "$APPLE_RELEASE_TOOLS/pipeline.mjs" source
+      run: node "$APPLE_RELEASE_TOOLS/../release/src/apple-pipeline.mjs" source
     - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       with:
         ref: ${{ inputs.phase == 'plan' && steps.source.outputs.source-sha || inputs.source-sha }}
@@ -137,7 +138,7 @@ runs:
       env:
         npm_config_registry: ${{ inputs.registry-url }}
       run: pnpm --dir "$APPLE_RELEASE_TOOLS/.." install --frozen-lockfile --ignore-scripts
-    - uses: ./.github/actions/apple-release
+    - uses: ./.github/actions/apple-macos-release
       env:
         npm_config_registry: ${{ inputs.registry-url }}
       with:
@@ -149,7 +150,7 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.token }}
         APPLE_FIND_ARTIFACT: ${{ inputs.plan-artifact }}
-      run: node "$APPLE_RELEASE_TOOLS/pipeline.mjs" find
+      run: node "$APPLE_RELEASE_TOOLS/../release/src/apple-pipeline.mjs" find
     - if: inputs.phase == 'plan' && steps.saved-plan.outputs.exists == 'true'
       uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
       with:
@@ -161,7 +162,7 @@ runs:
         name: ${{ inputs.plan-artifact }}
         path: target/release-plan
     - if: inputs.phase == 'plan'
-      uses: ./.github/actions/apple-release
+      uses: ./.github/actions/apple-macos-release
       env:
         GH_TOKEN: ${{ inputs.token }}
       with:
@@ -171,7 +172,9 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
-      run: node "$APPLE_RELEASE_TOOLS/pipeline.mjs" plan
+        APPLE_STABLE_SIGNING: developer-id
+        APPLE_PREVIEW_SIGNING: ${{ inputs.preview-signing }}
+      run: node "$APPLE_RELEASE_TOOLS/../release/src/apple-pipeline.mjs" plan
     - if: inputs.phase == 'plan' && steps.plan.outputs.release == 'true' && steps.saved-plan.outputs.exists != 'true'
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
@@ -180,7 +183,7 @@ runs:
         if-no-files-found: error
         retention-days: 90
     - if: inputs.phase != 'plan'
-      uses: ./.github/actions/apple-release
+      uses: ./.github/actions/apple-macos-release
       with:
         phase: env
         settings: ${{ inputs.settings }}
@@ -190,7 +193,7 @@ runs:
       env:
         GH_TOKEN: ${{ inputs.token }}
         APPLE_FIND_ARTIFACT: ${{ inputs.signed-artifact }}
-      run: node "$APPLE_RELEASE_TOOLS/pipeline.mjs" find
+      run: node "$APPLE_RELEASE_TOOLS/../release/src/apple-pipeline.mjs" find
     - if: inputs.phase == 'build' && steps.saved.outputs.exists == 'true'
       uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
       with:
@@ -205,9 +208,11 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
-      run: node "$APPLE_RELEASE_TOOLS/pipeline.mjs" guard
+        APPLE_STABLE_SIGNING: developer-id
+        APPLE_PREVIEW_SIGNING: ${{ inputs.preview-signing }}
+      run: node "$APPLE_RELEASE_TOOLS/../release/src/apple-pipeline.mjs" guard
     - if: inputs.phase == 'build' && steps.saved.outputs.exists != 'true'
-      uses: ./.github/actions/apple-release
+      uses: ./.github/actions/apple-macos-release
       env:
         GH_TOKEN: ${{ inputs.token }}
         npm_config_registry: ${{ inputs.registry-url }}
@@ -216,7 +221,7 @@ runs:
         credentials: ${{ inputs.credentials }}
         settings: ${{ inputs.settings }}
     - if: inputs.phase != 'plan'
-      uses: ./.github/actions/apple-release
+      uses: ./.github/actions/apple-macos-release
       with:
         phase: verify
         settings: ${{ inputs.settings }}
@@ -225,7 +230,9 @@ runs:
       shell: bash
       env:
         GH_TOKEN: ${{ inputs.token }}
-      run: node "$APPLE_RELEASE_TOOLS/pipeline.mjs" verify
+        APPLE_STABLE_SIGNING: developer-id
+        APPLE_PREVIEW_SIGNING: ${{ inputs.preview-signing }}
+      run: node "$APPLE_RELEASE_TOOLS/../release/src/apple-pipeline.mjs" verify
     - if: inputs.phase == 'build' && steps.saved.outputs.exists != 'true'
       uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
       with:
@@ -235,7 +242,7 @@ runs:
         compression-level: 0
         retention-days: 90
     - if: inputs.phase == 'publish'
-      uses: ./.github/actions/apple-release
+      uses: ./.github/actions/apple-macos-release
       env:
         GH_TOKEN: ${{ inputs.token }}
       with:

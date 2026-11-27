@@ -4,12 +4,14 @@ import { createHash } from 'node:crypto';
 import { mkdtempSync, writeFileSync, rmSync, symlinkSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { resolve } from 'node:path';
-import { validateSource, validatePush, validatePlan, selectArtifact, verifyPackages } from './pipeline.mjs';
+import { fileURLToPath } from 'node:url';
+import { spawnSync } from 'node:child_process';
+import { validateSource, validatePush, validatePlan, selectArtifact, verifyPackages } from '../src/apple-pipeline.mjs';
 
 const source = 'a'.repeat(40);
 const env = { GITHUB_REPOSITORY: 'fixture/app', GITHUB_REF: 'refs/heads/main', GITHUB_RUN_ID: '42',
   CI_RUN_ID: '41', APPLE_PROFILE: 'preview-only', RELEASE_BRANCH: 'main', SOURCE_SHA: source,
-  APPLE_CI_WORKFLOW: 'ci.yml', APPLE_PREVIEW_SIGNING: 'ad-hoc' };
+  APPLE_CI_WORKFLOW: 'ci.yml', APPLE_PREVIEW_SIGNING: 'ad-hoc', APPLE_STABLE_SIGNING: 'developer-id' };
 const preview = { schema: 1, release: true, repository: 'fixture/app', branch: 'main', sourceSha: source,
   runId: '42', ciRunId: '41', tag: 'desktop-v1.2.3-preview.1', version: '1.2.3-preview.1', channel: 'preview', notes: 'Fix the app.' };
 test('checked main pushes preserve retry identity after the branch advances', () => {
@@ -72,4 +74,35 @@ test('publication accepts only original signed bytes and the selected signing po
   rmSync(resolve(directory, 'app.dmg'));
   symlinkSync(planFile, resolve(directory, 'app.dmg'));
   assert.throws(() => verifyPackages(preview, options), /regular files/);
+});
+
+test('shared receipt verification uses the signing policy declared by the platform Action', t => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'apple-platform-policy-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const plan = { ...preview, branch: 'release', version: '1.2.3', tag: 'v1.2.3', channel: 'stable' };
+  const planFile = resolve(directory, 'plan.json');
+  const digest = value => createHash('sha256').update(value).digest('hex');
+  writeFileSync(planFile, JSON.stringify(plan));
+  writeFileSync(resolve(directory, 'package.zip'), 'signed-original');
+  writeFileSync(resolve(directory, 'validated-artifacts.json'), JSON.stringify({
+    schema: 1, planSha256: digest(JSON.stringify(plan)), sourceSha: plan.sourceSha,
+    tag: plan.tag, signingMode: 'platform-distribution', files: { 'package.zip': digest('signed-original') },
+  }));
+  const options = { ...env, APPLE_STABLE_SIGNING: 'platform-distribution',
+    RELEASE_PLAN: planFile, APPLE_ARTIFACT_DIRECTORY: directory };
+  assert.equal(verifyPackages(plan, options).length, 2);
+  assert.throws(() => verifyPackages(plan, { ...options, APPLE_STABLE_SIGNING: 'developer-id' }));
+  assert.throws(() => verifyPackages(plan, { ...options, APPLE_STABLE_SIGNING: '' }), /signing policy/);
+});
+
+test('the shared pipeline CLI executes when reached through a linked package path', t => {
+  const directory = mkdtempSync(resolve(tmpdir(), 'apple-linked-cli-'));
+  t.after(() => rmSync(directory, { recursive: true, force: true }));
+  const entry = resolve(directory, 'pipeline.mjs');
+  symlinkSync(fileURLToPath(new URL('../src/apple-pipeline.mjs', import.meta.url)), entry);
+  const result = spawnSync(process.execPath, [entry, 'plan'], {
+    env: { ...process.env, GH_TOKEN: '', GITHUB_REPOSITORY: '' }, encoding: 'utf8',
+  });
+  assert.equal(result.status, 1, result.stdout + result.stderr);
+  assert.match(result.stderr, /Explicit workflow token and repository are required/);
 });

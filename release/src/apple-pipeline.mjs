@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { appendFileSync, existsSync, lstatSync, readFileSync, realpathSync } from 'node:fs';
 import { resolve, relative } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { verifyArtifactReceipt } from '../release/src/apple.mjs';
+import { verifyArtifactReceipt } from './apple.mjs';
 
 const sha = /^[a-f0-9]{40}$/;
 const repository = /^[\w.-]+\/[\w.-]+$/;
@@ -31,6 +31,11 @@ export function validatePush(env, tip) {
   }
   return { branch: 'main', 'source-sha': env.GITHUB_SHA };
 }
+function signingPolicy(plan, env) {
+  const mode = plan.channel === 'stable' ? env.APPLE_STABLE_SIGNING : env.APPLE_PREVIEW_SIGNING;
+  if (typeof mode !== 'string' || !/^[a-z]+(?:-[a-z]+)*$/.test(mode)) throw new Error('The platform Action must declare its signing policy');
+  return mode;
+}
 export function validatePlan(plan, env) {
   if (!['preview-only', 'preview-stable', 'maintenance'].includes(env.APPLE_PROFILE)
       || plan.schema !== 1 || typeof plan.release !== 'boolean' || !sha.test(plan.sourceSha)
@@ -42,7 +47,7 @@ export function validatePlan(plan, env) {
   }
   if (!plan.release) return plan;
   const preview = plan.branch === 'main';
-  if (plan.signingMode !== undefined && plan.signingMode !== (preview ? env.APPLE_PREVIEW_SIGNING : 'developer-id')) throw new Error('Signing policy changed after planning');
+  if (plan.signingMode !== undefined && plan.signingMode !== signingPolicy(plan, env)) throw new Error('Signing policy changed after planning');
   if (!/^(?:[a-z0-9]+(?:-[a-z0-9]+)*-)?v\d+\.\d+\.\d+(?:-preview\.[1-9]\d*|\.[1-9]\d{0,11}-[a-f0-9]{7})?$/.test(plan.tag)
       || !/^\d+\.\d+\.\d+(?:-preview\.[1-9]\d*|-[1-9]\d*\.g[a-f0-9]{7})?$/.test(plan.version)
       || !['preview', 'timestamp', 'stable'].includes(plan.channel)
@@ -76,7 +81,7 @@ export function verifyPackages(plan, env) {
     if (!lstatSync(path).isFile() || relative(directory, realpathSync(path)) !== name) throw new Error('Release assets must be regular files within the artifact directory');
   }
   verifyArtifactReceipt({ plan, directory, planFile: env.RELEASE_PLAN, assetNames: names,
-    signingMode: plan.channel === 'stable' ? 'developer-id' : env.APPLE_PREVIEW_SIGNING });
+    signingMode: signingPolicy(plan, env) });
   return [...names, 'validated-artifacts.json'].map(name => resolve(directory, name));
 }
 function output(values, env) {
@@ -131,6 +136,6 @@ export async function main(mode, env = process.env) {
     } else throw new Error('Unknown Apple release phase');
   }
 }
-if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+if (process.argv[1] && existsSync(process.argv[1]) && realpathSync(process.argv[1]) === fileURLToPath(import.meta.url)) {
   main(process.argv[2]).catch(error => { console.error(error.message); process.exitCode = 1; });
 }

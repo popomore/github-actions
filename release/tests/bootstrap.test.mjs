@@ -18,7 +18,7 @@ function registry(block, input) {
   const value = /^\s+npm_config_registry:\s*(.+)$/m.exec(block)?.[1].trim();
   return value === '${{ inputs.registry-url }}' ? input : value;
 }
-for (const action of ['release/action.yml', 'apple-release/action.yml']) {
+for (const action of ['release/action.yml', 'apple-macos-release/action.yml']) {
   for (const override of [undefined, 'https://registry.example.test/']) {
     test(`${action} uses ${override ? 'the supplied registry' : 'the GitHub-hosted registry default'}`, t => {
       const lines = readFileSync(resolve(root, action), 'utf8').split('\n');
@@ -34,8 +34,8 @@ for (const action of ['release/action.yml', 'apple-release/action.yml']) {
       const bootstrap = lines.findIndex(line => /uses: pnpm\/action-setup@/.test(line));
       assert.notEqual(bootstrap, -1);
       assert.equal(registry(step(lines, bootstrap), selected), selected);
-      if (action === 'apple-release/action.yml') {
-        const adapters = lines.flatMap((line, index) => line.includes('uses: ./.github/actions/apple-release') ? [step(lines, index)] : []);
+      if (action === 'apple-macos-release/action.yml') {
+        const adapters = lines.flatMap((line, index) => line.includes('uses: ./.github/actions/apple-macos-release') ? [step(lines, index)] : []);
         for (const phase of ['setup', 'build']) {
           const adapter = adapters.find(block => new RegExp(`phase: ${phase}(?:\\n|$)`).test(block));
           assert(adapter, `The ${phase} adapter exists`);
