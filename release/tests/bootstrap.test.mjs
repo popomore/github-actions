@@ -16,6 +16,11 @@ for (const action of ['release/action.yml', 'apple-release/action.yml']) {
     while (start > 0 && !/^    - /.test(lines[start])) start--;
     const block = lines.slice(start, index + 1).join('\n');
     const registry = /^\s+npm_config_registry:\s*(\S+)/m.exec(block)?.[1];
+    const bootstrap = lines.findIndex(line => /uses: pnpm\/action-setup@/.test(line));
+    assert.notEqual(bootstrap, -1);
+    let end = bootstrap + 1;
+    while (end < lines.length && !/^    - /.test(lines[end])) end++;
+    assert.match(lines.slice(bootstrap, end).join('\n'), /npm_config_registry: https:\/\/registry\.npmjs\.org\//);
     const directory = mkdtempSync(resolve(tmpdir(), 'release-bootstrap-'));
     t.after(() => rmSync(directory, { recursive: true, force: true }));
     // Execute the real Action command and step environment with an installer

@@ -69,6 +69,10 @@ Persist the plan before building and retain the signed bytes and their receipts.
 
 ## Development
 
+Public tool bootstrap and release-engine dependencies always use
+`https://registry.npmjs.org/` inside the shared Actions. Consumers do not configure
+a registry for these steps, and the runner's registry configuration is unchanged.
+
 Use Node from `.node-version` and pnpm from `package.json`. Run `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm check`, and `pnpm test`. Tests use disposable Git repositories and fixture bytes; they do not sign, publish, deploy or install an application. CI covers Linux and macOS.
 
 References: [MusicX](https://github.com/popomore/MusicX), [Folio](https://github.com/popomore/folio-reader), [semantic-release API](https://semantic-release.org/developer-guide/js-api/).
