@@ -69,9 +69,12 @@ Persist the plan before building and retain the signed bytes and their receipts.
 
 ## Development
 
-Public tool bootstrap and release-engine dependencies always use
-`https://registry.npmjs.org/` inside the shared Actions. Consumers do not configure
-a registry for these steps, and the runner's registry configuration is unchanged.
+Both shared Actions accept an optional `registry-url` input. It defaults to
+`https://registry.npmjs.org/`, matching GitHub-hosted runners, so those callers
+can omit it. A self-hosted runner can explicitly select another registry with
+`with: { registry-url: 'https://registry.example.com/' }`. The selected registry
+applies to pnpm bootstrap and release-engine dependencies inside the Action;
+the runner's registry configuration is unchanged.
 
 Use Node from `.node-version` and pnpm from `package.json`. Run `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm check`, and `pnpm test`. Tests use disposable Git repositories and fixture bytes; they do not sign, publish, deploy or install an application. CI covers Linux and macOS.
 
