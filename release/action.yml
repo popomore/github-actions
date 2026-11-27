@@ -64,6 +64,7 @@ runs:
       shell: bash
       env:
         RELEASE_ACTION_ROOT: ${{ github.action_path }}/..
+        npm_config_registry: https://registry.npmjs.org/
       run: pnpm --dir "$RELEASE_ACTION_ROOT" install --frozen-lockfile --ignore-scripts
     - id: release
       shell: bash

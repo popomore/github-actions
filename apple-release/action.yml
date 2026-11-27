@@ -129,6 +129,8 @@ runs:
         package_json_file: ${{ steps.tooling.outputs.package-json }}
     - if: inputs.phase == 'plan' && inputs.install-engine == 'true'
       shell: bash
+      env:
+        npm_config_registry: https://registry.npmjs.org/
       run: pnpm --dir "$APPLE_RELEASE_TOOLS/.." install --frozen-lockfile --ignore-scripts
     - uses: ./.github/actions/apple-release
       with:
