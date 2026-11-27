@@ -34,6 +34,14 @@ for (const action of ['release/action.yml', 'apple-release/action.yml']) {
       const bootstrap = lines.findIndex(line => /uses: pnpm\/action-setup@/.test(line));
       assert.notEqual(bootstrap, -1);
       assert.equal(registry(step(lines, bootstrap), selected), selected);
+      if (action === 'apple-release/action.yml') {
+        const adapters = lines.flatMap((line, index) => line.includes('uses: ./.github/actions/apple-release') ? [step(lines, index)] : []);
+        for (const phase of ['setup', 'build']) {
+          const adapter = adapters.find(block => new RegExp(`phase: ${phase}(?:\\n|$)`).test(block));
+          assert(adapter, `The ${phase} adapter exists`);
+          assert.equal(registry(adapter, selected), selected);
+        }
+      }
       const directory = mkdtempSync(resolve(tmpdir(), 'release-bootstrap-'));
       t.after(() => rmSync(directory, { recursive: true, force: true }));
       // Execute the real Action command and step environment with an installer

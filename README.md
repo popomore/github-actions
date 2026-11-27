@@ -73,7 +73,8 @@ Both shared Actions accept an optional `registry-url` input. It defaults to
 `https://registry.npmjs.org/`, matching GitHub-hosted runners, so those callers
 can omit it. A self-hosted runner can explicitly select another registry with
 `with: { registry-url: 'https://registry.example.com/' }`. The selected registry
-applies to pnpm bootstrap and release-engine dependencies inside the Action;
+applies to pnpm bootstrap, release-engine dependencies and Apple adapter
+setup/build hooks inside the Action;
 the runner's registry configuration is unchanged.
 
 Use Node from `.node-version` and pnpm from `package.json`. Run `pnpm install --frozen-lockfile --ignore-scripts`, `pnpm check`, and `pnpm test`. Tests use disposable Git repositories and fixture bytes; they do not sign, publish, deploy or install an application. CI covers Linux and macOS.

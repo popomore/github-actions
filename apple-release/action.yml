@@ -138,6 +138,8 @@ runs:
         npm_config_registry: ${{ inputs.registry-url }}
       run: pnpm --dir "$APPLE_RELEASE_TOOLS/.." install --frozen-lockfile --ignore-scripts
     - uses: ./.github/actions/apple-release
+      env:
+        npm_config_registry: ${{ inputs.registry-url }}
       with:
         phase: setup
         settings: ${{ inputs.settings }}
@@ -208,6 +210,7 @@ runs:
       uses: ./.github/actions/apple-release
       env:
         GH_TOKEN: ${{ inputs.token }}
+        npm_config_registry: ${{ inputs.registry-url }}
       with:
         phase: build
         credentials: ${{ inputs.credentials }}
