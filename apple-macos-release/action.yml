@@ -161,7 +161,7 @@ runs:
       with:
         name: ${{ inputs.plan-artifact }}
         path: target/release-plan
-    - if: inputs.phase == 'plan'
+    - if: inputs.phase == 'plan' && steps.saved-plan.outputs.exists != 'true'
       uses: ./.github/actions/apple-macos-release
       env:
         GH_TOKEN: ${{ inputs.token }}
@@ -238,6 +238,7 @@ runs:
       with:
         name: ${{ inputs.signed-artifact }}
         path: ${{ steps.verified.outputs.paths }}
+        include-hidden-files: true
         if-no-files-found: error
         compression-level: 0
         retention-days: 90

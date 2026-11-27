@@ -129,7 +129,7 @@ Its composite steps implement these hooks:
 | Hook | Contract |
 | --- | --- |
 | `setup` | Install the product's release tooling with locked dependencies. No Apple signing credentials are passed. |
-| `plan` | Write or recover `target/release-plan/plan.json`; do not create tags. |
+| `plan` | Write `target/release-plan/plan.json` when no retained plan exists; do not create tags. Retried runs validate the retained original and skip this hook. |
 | `env` | Read that plan and export product build variables through `GITHUB_ENV`. |
 | `build` | Run product checks, package/sign/notarize, verify the final app and updater, and write the artifact receipt. Always clean temporary signing material. |
 | `verify` | Validate the exact product asset set and updater metadata without changing signed bytes. Runs on recovered packages too. |
