@@ -14,8 +14,8 @@
     "./release/tags": "./release/src/tags.mjs"
   },
   "scripts": {
-    "test": "node --test release/tests/*.test.mjs",
-    "check": "node --check release/src/apple.mjs && node --check release/src/planner.mjs && node --check release/src/action.mjs"
+    "test": "node --test release/tests/*.test.mjs apple-release/*.test.mjs",
+    "check": "node --check release/src/apple.mjs && node --check release/src/planner.mjs && node --check release/src/action.mjs && node --check apple-release/pipeline.mjs"
   },
   "dependencies": {
     "semantic-release": "26.0.1",

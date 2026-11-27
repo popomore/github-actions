@@ -35,7 +35,35 @@ Source version files remain development metadata. Product packaging injects the 
 
 The Apple helpers are extracted from MusicX and Folio. `appleReleaseConfig` supplies the Conventional Commits analyzer and explicit stable/preview/maintenance routing. `semanticEnvironment` normalizes GitHub installation-token authentication. `verifyPlannedRelease` stops tagging if packaging changed the version or source. `verifyArtifactReceipt` binds an exact asset set, signing mode and SHA-256 digests to the retained plan. `recoverChannelNote` repairs only the original tag's missing channel note after confirming its source.
 
-Products retain CI provenance dispatch, signing, packaging, notarization, Sparkle/Tauri signing, feed rules and platform-specific publication. Successful same-repository push CI must validate the exact branch tip before credential-bearing execution. PRs have no signing credentials. Stable direct distribution requires Developer ID Application, Hardened Runtime, notarization, stapling and an independently signed updater archive; missing credentials fail closed. App Store/TestFlight uses its separate distribution identity and entitlement/profile path.
+`apple-release` is the common composite pipeline used by MusicX, Folio and Mokisu.
+Call the same pinned Action with `phase: plan`, `phase: build` and `phase: publish`
+in jobs with the appropriate runner, Environment and permissions. Only the last
+phase can call a product's tag/publication hook. Products keep a small local
+`.github/actions/apple-release` adapter for packaging, signing, notarization,
+Sparkle/Tauri formats and store-specific operations.
+
+The common Action verifies official successful push CI at the selected tip,
+checks out exactly that source, retains the original plan, restores the original
+signed packages, rejects rebuilding an existing tag, and verifies the complete
+file set, signing policy, plan digest and package digests before publication.
+An explicitly declared `source-mode: push` supports products that run all app
+checks in the build adapter. PR code never enters a signing job.
+
+Profiles are `preview-only` (main), `preview-stable` (main/release) and
+`maintenance` (also N.x/N.N.x). Stable always requires Developer ID receipts.
+Preview signing is explicit, allowing the existing Developer ID or ad-hoc
+product policy; there is no automatic downgrade. `credentials` contains only
+explicitly mapped build or publication secrets and reaches only the relevant
+adapter phase. Never pass all repository secrets with `toJSON(secrets)`.
+
+The adapter phases are `setup`, `plan`, `env`, `build`, `verify`, `publish`.
+Planning writes `target/release-plan/plan.json` with schema, sourceSha, branch,
+runId, ciRunId, release, tag, version, channel and notes. The build adapter records
+`validated-artifacts.json` with schema 1, planSha256, sourceSha, tag, signingMode
+and a filename-to-SHA256 files map. Only those regular files and the receipt are
+uploaded. Adapter commands fail closed on missing credentials or validation.
+App Store/TestFlight remains a separate product job using its own identities,
+entitlements, provisioning profile and the original workflow build counter.
 
 Persist the plan before building and retain the signed bytes and their receipts. Retry the original run and those byte-identical artifacts after interruption. Never rebuild an already tagged version or overwrite conflicting assets. Publish fixed-version assets before channel pointers; previews and maintenance feeds cannot become the stable Latest. Stable promotion and backsync preserve tag ancestry through merge commits. Build numbers, workflow identity, installed-client compatibility and real-device checks remain product contracts.
 
